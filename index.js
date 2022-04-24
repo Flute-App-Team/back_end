@@ -1,6 +1,8 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
+const cors = require("cors");
+
 
 let users = [{username: 'Rizki', password: '123'}];
 let messages = [];
@@ -9,6 +11,7 @@ let id = 0;
 app = express();
 
 app.use(bodyParser.json());
+app.use(cors());
 
 function generateAccessToken(username) {
     return jwt.sign(username, 'TOKEN_SECRET');
@@ -67,6 +70,7 @@ app.post('/login', async (req, res) => {
 });
 
 function authenticateToken(req, res, next) {
+    console.log('Request headers: ', req.headers);
     const authHeader = req.headers['authorization']
     const token = authHeader && authHeader.split(' ')[1]
   
@@ -84,7 +88,6 @@ function authenticateToken(req, res, next) {
   }
 
 app.get('/message', authenticateToken, (req, res) => {
-    console.log('Request headers: ', req.headers);
     res.write(JSON.stringify(messages));
     res.end();
 });
