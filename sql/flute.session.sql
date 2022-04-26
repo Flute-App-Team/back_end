@@ -4,6 +4,12 @@ CREATE USER 'mysql'@'localhost' IDENTIFIED WITH mysql_native_password BY 'passwo
 GRANT CREATE, ALTER, DROP, INSERT, UPDATE, DELETE, SELECT, REFERENCES, RELOAD on *.* TO 'mysql'@'localhost' WITH GRANT OPTION;
 
 --Executed by mysql user
+
+-- @block
+CREATE DATABASE flute;
+
+-- Blok-blok di bawah sebaiknya dieksekusi menggunakan SQLTools (Ekstensi VSCode) untuk memudahkan
+-- Buat koneksi terlebih dahulu menggunakan SQLTools ke database flute
 -- @block
 CREATE TABLE Messages(
     id INT PRIMARY KEY AUTO_INCREMENT,
