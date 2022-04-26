@@ -2,40 +2,58 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
 const cors = require("cors");
-
-
-let users = [{username: 'Rizki', password: '123'}];
-let messages = [];
-let id = 0;
+const bcrypt = require('bcrypt');
+const mysql = require('mysql');
 
 app = express();
 
 app.use(bodyParser.json());
 app.use(cors());
 
+var con = mysql.createConnection({
+    host: "localhost",
+    user: "mysql",
+    password: "password",
+    database: "flute"
+});
+
+con.connect(function(err) {
+    if (err) throw err;
+    console.log("Connected to flute database!");
+}); 
+
 function generateAccessToken(username) {
     return jwt.sign(username, 'TOKEN_SECRET');
 }
 
-app.post('/register', (req, res) => {
+app.post('/register', async (req, res) => {
     try{
         console.log(req.body);
-        let foundUser = users.find((data) => req.body.username === data.username);
-        if (!(foundUser)) {
-            if (req.body.password !== '') {
-                res.sendStatus(200);
-                users.push({username: req.body.username, password: req.body.password});
-                console.log('Users: ', users);
+        //const foundUser = users.find((data) => req.body.username === data.username);
+        con.query(`SELECT COUNT(1) FROM Users WHERE username = '${req.body.username}';`, async function (err, result) {
+            if (err) throw err;
+            const foundUser = result[0]['COUNT(1)'];
+            console.log('foundUser: ', foundUser);
+            if (!(foundUser)) {
+                if (req.body.password !== '') {
+                    hashedPassword = await bcrypt.hash(req.body.password, 10);
+                    //users.push({username: req.body.username, password: hashedPassword});
+                    //console.log('Users: ', users);
+                    con.query(`INSERT INTO Users(username, password) VALUES('${req.body.username}', '${hashedPassword}');`, function (err, result) {
+                        if (err) throw err;
+                        res.sendStatus(200);
+                    });
+                }
+                else {
+                    res.send('Invalid password!');
+                }
             }
             else {
-                res.send('Invalid password');
+                res.send('Username exist!');
             }
-        }
-        else {
-            res.send('Username has been used');
-        }
+        });
     } catch (e){
-        res.send("Internal server error");
+        res.sendStatus(500);
         console.log(e);
     }
 });
@@ -43,28 +61,32 @@ app.post('/register', (req, res) => {
 app.post('/login', async (req, res) => {
     try{
         console.log(req.body);
-        let foundUser = users.find((data) => req.body.username === data.username);
-        if (foundUser) {
-            
-            let submittedPass = req.body.password;
-            let storedPass = foundUser.password;
-  
-            const passwordMatch = submittedPass === storedPass;//await bcrypt.compare(submittedPass, storedPass);
-            if (passwordMatch) {
-                let username = foundUser.username;
-                const token = generateAccessToken({ username: username });
-                console.log(token);
-                res.send(token);
+        con.query(`SELECT COUNT(1) FROM Users WHERE username = '${req.body.username}';`, async function (err, result) {
+            if (err) throw err;
+            const foundUser = result[0]['COUNT(1)'];
+            console.log('foundUser: ', foundUser);
+            if (foundUser) {
+                con.query(`SELECT password FROM Users WHERE username = '${req.body.username}';`, async function (err, result) {
+                    let submittedPass = req.body.password;
+                    let storedPass = result[0]['password'].toString();
+                    const passwordMatch = await bcrypt.compare(submittedPass, storedPass);
+                    if (passwordMatch) {
+                        let username = req.body.username;
+                        const token = generateAccessToken({ username: username });
+                        console.log(token);
+                        res.send(token);
+                    }
+                    else {
+                        res.send('Invalid password');
+                    }
+                });
             }
             else {
-                res.send('Invalid password');
+                res.send('Invalid username');
             }
-        }
-        else {
-            res.send('Invalid username');
-        }
+        });
     } catch (e){
-        res.send("Internal server error");
+        res.sendStatus(500);
         console.log(e);
     }
 });
@@ -76,39 +98,49 @@ function authenticateToken(req, res, next) {
   
     if (token == null || token == 'Invalid') return res.sendStatus(401)
 
-    jwt.verify(token, 'TOKEN_SECRET', (err, user) => {
-      console.log(err)
-  
-      if (err) return res.sendStatus(403)
-  
-      req.user = user
-  
-      next()
-    })
+    try {
+        jwt.verify(token, 'TOKEN_SECRET', (err, user) => {
+            console.log(err);
+            if (err) return res.sendStatus(403);
+            req.user = user;
+            next();
+        });
+    }
+    catch (e) {
+        console.log(e);
+    }
   }
 
 app.get('/message', authenticateToken, (req, res) => {
-    res.write(JSON.stringify(messages));
-    res.end();
+    con.query('SELECT * FROM Messages;', function (err, result) {
+        if (err) {
+            res.sendStatus(500);
+            throw err;
+        }
+        //console.log("Messages from database: " + JSON.stringify(result));
+        res.write(JSON.stringify(result));
+        res.end();
+    });
 });
 
 app.post('/message', authenticateToken, (req, res) => {
     console.log('Request headers: ', req.headers);
     console.log('Request body: ', req.body);
-    let obj = req.body;
-    if (!(obj // 👈 null and undefined check
-        && Object.keys(obj).length === 0
-        && Object.getPrototypeOf(obj) === Object.prototype)) {
-            req.body.timestamp = new Date();
-            req.body.messageId = id;
-            messages.push(req.body);
-            id++;
+    obj = req.body;
+    console.log('req.user.username: ', req.user.username);
+    if (!(obj && Object.keys(obj).length === 0 // null and undefined check
+        && Object.getPrototypeOf(obj) === Object.prototype)) { 
+            con.query(`INSERT INTO Messages(username, message) VALUES('${req.user.username}','${req.body.message}');`, function (err, result) {
+                if (err) {
+                    res.sendStatus(500);
+                    throw err;
+                }
+                res.sendStatus(200);
+            });
         }
     else {
         res.sendStatus(400);
     }
-    res.end();
-    console.log('Messages data: ', messages);
 });
 
 app.listen('8080', () => {
