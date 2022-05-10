@@ -27,29 +27,26 @@ function generateAccessToken(username) {
 }
 
 app.post('/register', async (req, res) => {
+    console.log('Incoming register request');
+    console.log(req.body);
     try{
-        console.log(req.body);
-        //const foundUser = users.find((data) => req.body.username === data.username);
         con.query(`SELECT COUNT(1) FROM Users WHERE username = '${req.body.username}';`, async function (err, result) {
             if (err) throw err;
             const foundUser = result[0]['COUNT(1)'];
-            console.log('foundUser: ', foundUser);
             if (!(foundUser)) {
                 if (req.body.password !== '') {
                     hashedPassword = await bcrypt.hash(req.body.password, 10);
-                    //users.push({username: req.body.username, password: hashedPassword});
-                    //console.log('Users: ', users);
                     con.query(`INSERT INTO Users(username, password) VALUES('${req.body.username}', '${hashedPassword}');`, function (err, result) {
                         if (err) throw err;
                         res.sendStatus(200);
                     });
                 }
                 else {
-                    res.send('Invalid password!');
+                    res.status(400).send('Password Empty');
                 }
             }
             else {
-                res.send('Username exist!');
+                res.status(409).send('Username Exist');
             }
         });
     } catch (e){
@@ -59,12 +56,12 @@ app.post('/register', async (req, res) => {
 });
 
 app.post('/login', async (req, res) => {
+    console.log('Incoming login request');
     try{
         console.log(req.body);
         con.query(`SELECT COUNT(1) FROM Users WHERE username = '${req.body.username}';`, async function (err, result) {
             if (err) throw err;
             const foundUser = result[0]['COUNT(1)'];
-            console.log('foundUser: ', foundUser);
             if (foundUser) {
                 con.query(`SELECT password FROM Users WHERE username = '${req.body.username}';`, async function (err, result) {
                     let submittedPass = req.body.password;
@@ -74,15 +71,15 @@ app.post('/login', async (req, res) => {
                         let username = req.body.username;
                         const token = generateAccessToken({ username: username });
                         console.log(token);
-                        res.send(token);
+                        res.status(200).send(token);
                     }
                     else {
-                        res.send('Invalid password');
+                        res.status(401).send('Invalid Password');
                     }
                 });
             }
             else {
-                res.send('Invalid username');
+                res.status(401).send('Invalid Username');
             }
         });
     } catch (e){
@@ -92,7 +89,6 @@ app.post('/login', async (req, res) => {
 });
 
 function authenticateToken(req, res, next) {
-    console.log('Request headers: ', req.headers);
     const authHeader = req.headers['authorization']
     const token = authHeader && authHeader.split(' ')[1]
   
@@ -100,31 +96,33 @@ function authenticateToken(req, res, next) {
 
     try {
         jwt.verify(token, 'TOKEN_SECRET', (err, user) => {
-            console.log(err);
-            if (err) return res.sendStatus(403);
+            if (err) {
+                console.log(err);
+                return res.sendStatus(403);
+            }
             req.user = user;
             next();
         });
     }
     catch (e) {
+        res.sendStatus(500);
         console.log(e);
     }
   }
 
 app.get('/message', authenticateToken, (req, res) => {
+    console.log('Incoming get request');
     con.query('SELECT * FROM Messages;', function (err, result) {
         if (err) {
             res.sendStatus(500);
             throw err;
         }
-        //console.log("Messages from database: " + JSON.stringify(result));
-        res.write(JSON.stringify(result));
-        res.end();
+        res.status(200).send(JSON.stringify(result));
     });
 });
 
 app.post('/message', authenticateToken, (req, res) => {
-    console.log('Request headers: ', req.headers);
+    console.log('Incoming post request');
     console.log('Request body: ', req.body);
     obj = req.body;
     console.log('req.user.username: ', req.user.username);
@@ -139,7 +137,7 @@ app.post('/message', authenticateToken, (req, res) => {
             });
         }
     else {
-        res.sendStatus(400);
+        res.status(400).send('Password Empty');
     }
 });
 
