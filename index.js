@@ -23,7 +23,7 @@ con.connect(function(err) {
 }); 
 
 function generateAccessToken(username) {
-    return jwt.sign(username, 'TOKEN_SECRET');
+    return jwt.sign(username, 'TOKEN_SECRET', {expiresIn: "15s"});
 }
 
 app.post('/register', async (req, res) => {
