@@ -4,6 +4,21 @@ const jwt = require('jsonwebtoken');
 const cors = require("cors");
 const bcrypt = require('bcrypt');
 const mysql = require('mysql');
+const winston = require('winston');
+
+// Logger configuration
+const logConfiguration = {
+    format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json()
+    ),
+    transports: [
+        new winston.transports.File({
+            filename: 'logs/requests.log'
+        })
+    ]
+};
+const logger = winston.createLogger(logConfiguration);
 
 app = express();
 
@@ -23,12 +38,13 @@ con.connect(function(err) {
 }); 
 
 function generateAccessToken(username) {
-    return jwt.sign(username, 'TOKEN_SECRET', {expiresIn: "2m"});
+    return jwt.sign(username, 'TOKEN_SECRET', {expiresIn: "2h"});
 }
 
 app.post('/register', async (req, res) => {
     console.log('Incoming register request');
     console.log(req.body);
+    logger.info(`Received POST /register, request header: ${JSON.stringify(req.headers)}, request body: ${JSON.stringify(req.body)}`); 
     try{
         con.query(`SELECT COUNT(1) FROM Users WHERE username = '${req.body.username}';`, async function (err, result) {
             if (err) throw err;
@@ -57,8 +73,9 @@ app.post('/register', async (req, res) => {
 
 app.post('/login', async (req, res) => {
     console.log('Incoming login request');
+    console.log(req.body);
+    logger.info(`Received POST /login, request header: ${req.headers}, request body: ${req.body}`);
     try{
-        console.log(req.body);
         con.query(`SELECT COUNT(1) FROM Users WHERE username = '${req.body.username}';`, async function (err, result) {
             if (err) throw err;
             const foundUser = result[0]['COUNT(1)'];
@@ -98,7 +115,7 @@ function authenticateToken(req, res, next) {
         jwt.verify(token, 'TOKEN_SECRET', (err, user) => {
             if (err) {
                 console.log(err);
-                return res.sendStatus(403);
+                return res.sendStatus(401);
             }
             req.user = user;
             next();
@@ -112,6 +129,7 @@ function authenticateToken(req, res, next) {
 
 app.get('/message', authenticateToken, (req, res) => {
     console.log('Incoming get request');
+    logger.info(`Received GET /message, request header: ${req.headers}`);
     con.query('SELECT * FROM Messages;', function (err, result) {
         if (err) {
             res.sendStatus(500);
@@ -124,10 +142,9 @@ app.get('/message', authenticateToken, (req, res) => {
 app.post('/message', authenticateToken, (req, res) => {
     console.log('Incoming post request');
     console.log('Request body: ', req.body);
-    obj = req.body;
+    logger.info(`Received POST /message, request header: ${req.headers}, request body: ${req.body}`);
     console.log('req.user.username: ', req.user.username);
-    if (!(obj && Object.keys(obj).length === 0 // null and undefined check
-        && Object.getPrototypeOf(obj) === Object.prototype)) { 
+    if (!(req.body.message === '')) { 
             con.query(`INSERT INTO Messages(username, message) VALUES('${req.user.username}','${req.body.message}');`, function (err, result) {
                 if (err) {
                     res.sendStatus(500);
@@ -137,7 +154,7 @@ app.post('/message', authenticateToken, (req, res) => {
             });
         }
     else {
-        res.status(400).send('Password Empty');
+        res.status(400).send('Message Empty');
     }
 });
 
